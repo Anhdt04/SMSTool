@@ -1,0 +1,10 @@
+{
+  "mode": "mock",
+  "cookie": "",
+  "telegramToken": "tuananh@",
+  "telegramChatId": "tuananhc3bacly@gmail.com",
+  "enableTelegram": true,
+  "enableLoop": true,
+  "delayMs": 100,
+  "port": 3000
+}

@@ -1,0 +1,16 @@
+{
+  "name": "smcs-lookup-tool",
+  "version": "1.0.0",
+  "description": "Tool tự động tra cứu số thuê bao trên hệ thống SMCS VNPT",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/test_logic.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "cheerio": "^1.0.0",
+    "express": "^4.21.2"
+  }
+}

@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Tool hỗ trợ tự động tra cứu thông tin sản phẩm và thuê bao trên hệ thống SMCS VNPT">
+  <title>SMCS VNPT - Công Cụ Tra Cứu Số Thuê Bao Tự Động</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="logo-badge">VNPT</div>
+        <div class="header-title-group">
+          <h1>SMCS Tra Cứu Thuê Bao</h1>
+          <p class="subtitle">Hệ Thống Bán Hàng Tập Trung - Giám Sát & Thông Báo Tự Động</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="mode-selector" id="modeSelectorGroup">
+          <button type="button" class="mode-btn active" id="btnModeMock" data-mode="mock" title="Chạy thử nghiệm mô phỏng">
+            <span class="dot mock"></span> Giả Lập (Mock)
+          </button>
+          <button type="button" class="mode-btn" id="btnModeLive" data-mode="live" title="Kết nối thật vào smcs.vnpt.com.vn">
+            <span class="dot live"></span> Trực Tiếp (Live)
+          </button>
+        </div>
+        <div class="connection-status" id="connectionBadge">
+          <span class="status-indicator ready"></span>
+          <span id="connectionText">Sẵn sàng</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Grid Layout -->
+    <main class="main-layout">
+      <!-- Cột Trái: Cấu hình & Dữ liệu đầu vào -->
+      <section class="left-panel">
+        <!-- Card 1: Cấu hình Cookie & Hệ Thống -->
+        <div class="glass-card config-card">
+          <div class="card-header">
+            <h2>⚙️ Cấu Hình Kết Nối</h2>
+            <span class="auto-save-tag" id="autoSaveIndicator">Tự động lưu</span>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label for="inputCookie">
+                Cookie Đăng Nhập (SMCS)
+                <span class="tooltip" title="Lấy cookie từ F12 Network trên trang smcs.vnpt.com.vn">ℹ️</span>
+              </label>
+              <textarea id="inputCookie" rows="2" placeholder="Dán chuỗi Cookie từ smcs.vnpt.com.vn vào đây (SESSIONID=...; JSESSIONID=...)"></textarea>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="inputDelay">
+                  Độ trễ tra cứu (Delay)
+                  <span class="tooltip" title="Thời gian nghỉ giữa 2 lần tra cứu, tối thiểu 50ms">ℹ️</span>
+                </label>
+                <div class="input-unit-wrapper">
+                  <input type="number" id="inputDelay" min="50" step="50" value="500">
+                  <span class="unit-text">mili-giây (ms)</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tùy chọn Checkbox -->
+            <div class="checkbox-group">
+              <label class="custom-checkbox">
+                <input type="checkbox" id="checkLoop" checked>
+                <span class="checkmark"></span>
+                <span class="checkbox-label">
+                  <strong>Tra cứu xoay vòng (Loop)</strong>
+                  <small>Lặp lại danh sách cho đến khi dừng hoặc các số trúng ĐK 2</small>
+                </span>
+              </label>
+
+              <label class="custom-checkbox">
+                <input type="checkbox" id="checkTelegram">
+                <span class="checkmark"></span>
+                <span class="checkbox-label">
+                  <strong>Bật thông báo về Telegram</strong>
+                  <small>Gửi tin nhắn khi số thỏa mãn ĐK 1 hoặc ĐK 2</small>
+                </span>
+              </label>
+            </div>
+
+            <!-- Cấu hình Telegram (Mở rộng) -->
+            <div class="telegram-subcard" id="telegramConfigBox">
+              <div class="form-group">
+                <label for="inputTeleToken">Telegram Bot Token</label>
+                <input type="password" id="inputTeleToken" placeholder="VD: 7123456789:AAFx...">
+              </div>
+              <div class="form-group">
+                <label for="inputTeleChatId">Telegram Chat / Group ID</label>
+                <input type="text" id="inputTeleChatId" placeholder="VD: -100123456789 hoặc @tennhom">
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" id="btnTestTele">
+                🔔 Kiểm tra gửi thử Telegram
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Danh Sách Số Thuê Bao Đầu Vào -->
+        <div class="glass-card input-card">
+          <div class="card-header">
+            <h2>📋 Danh Sách Số Thuê Bao</h2>
+            <div class="badge-count" id="badgePhoneCount">0 số</div>
+          </div>
+          <div class="card-body">
+            <div class="input-actions-bar">
+              <button type="button" class="btn-text" id="btnLoadSample">✨ Nạp dữ liệu mẫu</button>
+              <button type="button" class="btn-text text-danger" id="btnClearPhones">Xóa hết</button>
+            </div>
+            <textarea id="inputPhoneList" rows="6" placeholder="Nhập hoặc dán danh sách số thuê bao vào đây (Mỗi số 1 dòng hoặc cách nhau bằng dấu phẩy).&#10;Ví dụ:&#10;84942251121&#10;0888441819&#10;84912345671"></textarea>
+            <div class="input-hint">
+              Hệ thống tự động chuẩn hóa số về đầu <code>84...</code> và loại bỏ trùng lặp.
+            </div>
+
+            <!-- Các nút bấm điều khiển phiên tra cứu -->
+            <div class="control-buttons-panel">
+              <button type="button" class="btn btn-primary btn-lg" id="btnStart">
+                ▶ Bắt Đầu Tra Cứu
+              </button>
+              <button type="button" class="btn btn-warning" id="btnPause" disabled>
+                ⏸ Tạm Dừng
+              </button>
+              <button type="button" class="btn btn-danger" id="btnStop" disabled>
+                ⏹ Dừng Hẳn
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Cột Phải: Kết Quả & Giám Sát Thời Gian Thực -->
+      <section class="right-panel">
+        <!-- Thống Kê Nhanh (Metric Counters) -->
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-icon total">🔢</div>
+            <div class="metric-content">
+              <span class="metric-label">Tổng Số Nạp</span>
+              <span class="metric-value" id="valTotal">0</span>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-icon processed">⚡</div>
+            <div class="metric-content">
+              <span class="metric-label">Lượt Đã Tra</span>
+              <span class="metric-value" id="valProcessed">0</span>
+            </div>
+          </div>
+          <div class="metric-card cond1">
+            <div class="metric-icon cond1-icon">🟢</div>
+            <div class="metric-content">
+              <span class="metric-label">ĐK 1 (Sẵn Sàng)</span>
+              <span class="metric-value" id="valCond1">0</span>
+            </div>
+          </div>
+          <div class="metric-card cond2">
+            <div class="metric-icon cond2-icon">🔴</div>
+            <div class="metric-content">
+              <span class="metric-label">ĐK 2 (Đã Book Số)</span>
+              <span class="metric-value" id="valCond2">0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ô RIÊNG: SAO CHÉP NHANH SỐ ĐK 1 (Yêu cầu đặc biệt của khách hàng) -->
+        <div class="glass-card quick-copy-card">
+          <div class="card-header highlight">
+            <div class="title-with-badge">
+              <h2>🎯 Ô Riêng: Số Đạt ĐK 1 (Kho VNP & Sẵn Sàng Sử Dụng)</h2>
+              <span class="badge-pill" id="badgeCond1Count">0 số</span>
+            </div>
+            <button type="button" class="btn btn-accent btn-sm" id="btnCopyAllCond1" title="Sao chép toàn bộ số trong ô này để dán vào việc khác">
+              📋 Sao Chép Tất Cả
+            </button>
+          </div>
+          <div class="card-body">
+            <div class="quick-copy-container" id="cond1Container">
+              <div class="empty-state" id="emptyCond1">
+                Chưa có số nào thỏa mãn ĐK 1. Khi tìm thấy số sẵn sàng sử dụng tại Kho chung VNP, số sẽ tự động xuất hiện tại đây để bạn click copy ngay lập tức.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- BẢNG DỮ LIỆU CHÍNH (4 CỘT) -->
+        <div class="glass-card data-table-card">
+          <div class="card-header">
+            <div class="table-title-group">
+              <h2>📊 Kết Quả Tra Cứu Chi Tiết</h2>
+              <span class="cycle-indicator" id="cycleBadge">Vòng: 1</span>
+            </div>
+            <div class="table-actions">
+              <div class="search-box">
+                <input type="text" id="inputTableSearch" placeholder="Lọc nhanh kết quả...">
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" id="btnExportExcel" title="Sao chép toàn bộ bảng với định dạng sẵn sàng dán vào Excel">
+                📑 Sao Chép Ra Excel
+              </button>
+              <button type="button" class="btn-icon" id="btnClearTable" title="Xóa kết quả bảng">🗑️</button>
+            </div>
+          </div>
+          <div class="table-container">
+            <table class="data-table" id="resultsTable">
+              <thead>
+                <tr>
+                  <th class="sortable" data-col="phone" id="thPhone">
+                    Số Thuê Bao <span class="sort-icon">⇅</span>
+                  </th>
+                  <th class="sortable" data-col="status" id="thStatus">
+                    Trạng Thái Sản Phẩm <span class="sort-icon">⇅</span>
+                  </th>
+                  <th class="sortable" data-col="warehouse" id="thWarehouse">
+                    Hàng Đang Tại Kho <span class="sort-icon">⇅</span>
+                  </th>
+                  <th class="sortable" data-col="date" id="thDate">
+                    Ngày Thay Đổi <span class="sort-icon">⇅</span>
+                  </th>
+                  <th class="col-action">Thao Tác</th>
+                </tr>
+              </thead>
+              <tbody id="tableBody">
+                <tr class="empty-row" id="rowTableEmpty">
+                  <td colspan="5">Chưa có kết quả tra cứu nào. Hãy bấm "Bắt Đầu Tra Cứu" để chạy.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Nhật ký sự kiện (Activity Log) -->
+        <div class="glass-card logs-card">
+          <div class="card-header">
+            <h3>📝 Nhật Ký Hoạt Động Trực Tiếp</h3>
+            <button type="button" class="btn-text btn-xs" id="btnClearLogs">Xóa log</button>
+          </div>
+          <div class="logs-stream" id="logsContainer">
+            <div class="log-entry info">
+              <span class="log-time">--:--:--</span>
+              <span class="log-text">Hệ thống đã sẵn sàng khởi chạy.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Toast Notification Popup -->
+    <div class="toast-container" id="toastContainer"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
