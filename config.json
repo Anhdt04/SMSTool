@@ -1,8 +1,8 @@
 {
-  "mode": "mock",
-  "cookie": "",
-  "telegramToken": "tuananh@",
-  "telegramChatId": "tuananhc3bacly@gmail.com",
+  "mode": "live",
+  "cookie": "SESSIONID=!2+MajJR7Tipnpz7M+X1MUt2L8IDHuXdETOADhiOhkzhphkvLGE7dEDtPMHlIfn7QknRR1hLUrGKtmfM=; JSESSIONID=5RKAHl5qSVdUDjL7xhkWmwBAWC9VB8Zo8l4S7XpSuGEB-wLJS86X!1260974190",
+  "telegramToken": "8864373608:AAFdBrh3yhTh8ko9Zo2i9ztEaw_ejB5n6PA",
+  "telegramChatId": "-5340767673",
   "enableTelegram": true,
   "enableLoop": true,
   "delayMs": 100,

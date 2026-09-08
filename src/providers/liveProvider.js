@@ -98,30 +98,43 @@ class LiveProvider extends SMCSProvider {
       this.lastViewState = viewState;
     }
 
-    // Các selector bóc tách (được tối ưu hóa theo DOM của PrimeFaces)
-    // Trường hợp 1: DOM dạng Input / Textbox như trong hình 4, 5, 6
-    let productStatus = $('[id*="trangThaiSanPham"]').val() || $('[id*="trangThai"]').val() || '';
-    let warehouse = $('[id*="khoHang"]').val() || $('[id*="hangDangTaiKho"]').val() || '';
-    let updatedDate = $('[id*="ngayThayDoi"]').val() || $('[id*="ngayCapNhat"]').val() || '';
+    // Bóc tách động từ DOM của PrimeFaces (hỗ trợ cả input, select, textarea và table cell)
+    let productStatus = $('[id*="trangThaiSanPham"]').val() 
+      || $('[id*="trangThai"]').val() 
+      || $('input[name*="trangThai"]').val()
+      || '';
 
-    // Trường hợp 2: DOM dạng table cell hoặc label
+    let warehouse = $('[id*="hangDangTaiKho"]').val() 
+      || $('[id*="khoHang"]').val() 
+      || $('input[name*="kho"]').val()
+      || '';
+
+    let updatedDate = $('[id*="ngayThayDoi"]').val() 
+      || $('[id*="ngayCapNhat"]').val() 
+      || $('input[name*="ngay"]').val()
+      || '';
+
+    // Nếu là text hiển thị dạng thẻ span/div/td
     if (!productStatus) {
-      $('td, span, div').each((i, el) => {
-        const text = $(el).text().trim();
-        if (text.includes('Sẵn sàng sử dụng')) productStatus = 'Sẵn sàng sử dụng';
-        else if (text.includes('Đã book số')) productStatus = 'Đã book số';
-      });
+      productStatus = $('[id*="trangThaiSanPham"]').text().trim() 
+        || $('[id*="trangThai"]').text().trim() 
+        || '';
     }
-
     if (!warehouse) {
-      if (rawHtml.includes('Kho số chung VNP')) warehouse = 'Kho số chung VNP';
-      else if (rawHtml.includes('Kho số thu hồi')) warehouse = 'Kho số thu hồi';
+      warehouse = $('[id*="hangDangTaiKho"]').text().trim() 
+        || $('[id*="khoHang"]').text().trim() 
+        || '';
+    }
+    if (!updatedDate) {
+      updatedDate = $('[id*="ngayThayDoi"]').text().trim() 
+        || $('[id*="ngayCapNhat"]').text().trim() 
+        || '';
     }
 
     return {
       phone: phoneNumber,
-      productStatus: productStatus || 'Không xác định',
-      warehouse: warehouse || 'Không xác định',
+      productStatus: productStatus || 'Chưa cập nhật',
+      warehouse: warehouse || 'Chưa cập nhật',
       updatedDate: updatedDate || new Date().toLocaleString('vi-VN')
     };
   }
