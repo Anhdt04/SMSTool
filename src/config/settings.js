@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const CONFIG_FILE = path.join(__dirname, '../../config.json');
+const CONFIG_FILE = path.join(process.cwd(), 'config.json');
 
 const DEFAULT_SETTINGS = {
   mode: 'mock', // 'mock' hoặc 'live'

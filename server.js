@@ -7,7 +7,30 @@ const telegramService = require('./src/services/telegramService');
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+let embeddedAssets = { html: '', css: '', js: '' };
+try {
+  embeddedAssets = require('./src/public/embeddedAssets');
+} catch (e) {}
+
+// Hỗ trợ thư mục tĩnh nếu có ngoài ổ đĩa
 app.use(express.static(path.join(__dirname, 'src/public')));
+app.use(express.static(path.join(process.cwd(), 'src/public')));
+
+// Fallback phục vụ giao diện từ bộ nhớ nhúng trong file exe (khi chạy không có thư mục đính kèm)
+app.get('/', (req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(embeddedAssets.html || '<h1>SMCS Tool</h1>');
+});
+
+app.get('/style.css', (req, res) => {
+  res.setHeader('Content-Type', 'text/css; charset=utf-8');
+  res.send(embeddedAssets.css || '');
+});
+
+app.get('/app.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.send(embeddedAssets.js || '');
+});
 
 // Quản lý các kết nối Server-Sent Events (SSE) để cập nhật giao diện thời gian thực
 const sseClients = new Set();
@@ -106,10 +129,16 @@ app.get('/api/status', (req, res) => {
 });
 
 const PORT = process.env.PORT || settingsManager.get().port || 3000;
+const { exec } = require('child_process');
 
 app.listen(PORT, () => {
   console.log(`=================================================`);
   console.log(`🚀 SMCS VNPT Lookup Tool đang chạy tại:`);
   console.log(`👉 http://localhost:${PORT}`);
   console.log(`=================================================`);
+
+  // Tự động mở trình duyệt cho người dùng
+  if (process.platform === 'win32') {
+    exec(`start http://localhost:${PORT}`).unref();
+  }
 });

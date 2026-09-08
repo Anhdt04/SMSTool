@@ -18,3 +18,8 @@ export_doc_media.ps1
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# Build artifacts
+dist/
+*.blob
+SMCS_Tool.exe
