@@ -3,25 +3,69 @@ const cheerio = require('cheerio');
 const SMCSProvider = require('./smcsProvider');
 
 /**
- * Live Provider kết nối trực tiếp vào https://smcs.vnpt.com.vn
- * Chuẩn bị sẵn cấu trúc request PrimeFaces/JSF.
- * Khi khách hàng cung cấp cURL/HAR, chỉ cần điền các tham số form vào đây.
+ * Live Provider kết nối trực tiếp vào https://smcs.vnpt.com.vn/client/productLookup
+ * Tự động gửi request chuẩn PrimeFaces và bóc tách dữ liệu 4 trường.
  */
 class LiveProvider extends SMCSProvider {
   constructor(config = {}) {
     super();
     this.baseUrl = config.baseUrl || 'https://smcs.vnpt.com.vn';
-    this.lookupUrl = config.lookupUrl || `${this.baseUrl}/index.xhtml`;
+    this.lookupUrl = config.lookupUrl || `${this.baseUrl}/client/productLookup`;
     this.lastViewState = null;
+    this.lastCookie = null;
   }
 
   /**
-   * Cập nhật cấu hình endpoint và form payload từ cURL khách cung cấp
+   * Cập nhật cấu hình endpoint và form payload
    */
   updateConfig(customConfig) {
     if (customConfig.baseUrl) this.baseUrl = customConfig.baseUrl;
     if (customConfig.lookupUrl) this.lookupUrl = customConfig.lookupUrl;
     if (customConfig.defaultViewState) this.lastViewState = customConfig.defaultViewState;
+  }
+
+  /**
+   * Khởi tạo ViewState ban đầu từ trang HTML nếu chưa có
+   */
+  async initViewState(cookie) {
+    try {
+      const getRes = await axios.get(this.lookupUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Cookie': cookie.trim()
+        },
+        timeout: 10000,
+        validateStatus: () => true
+      });
+
+      if (getRes.status === 401 || getRes.status === 403 || (getRes.data && getRes.data.includes('login.xhtml'))) {
+        return {
+          success: false,
+          error: 'Cookie đã hết hạn hoặc phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại SMCS và lấy Cookie mới.'
+        };
+      }
+
+      if (getRes.data) {
+        const $ = cheerio.load(getRes.data);
+        const vs = $('input[name="javax.faces.ViewState"]').val();
+        if (vs) {
+          this.lastViewState = vs;
+        } else {
+          const vsMatch = getRes.data.match(/name="javax\.faces\.ViewState"[^>]*value="([^"]*)"/i)
+            || getRes.data.match(/value="([^"]*)"[^>]*name="javax\.faces\.ViewState"/i);
+          if (vsMatch) {
+            this.lastViewState = vsMatch[1] || vsMatch[2];
+          }
+        }
+      }
+      return { success: true };
+    } catch (err) {
+      return {
+        success: false,
+        error: `Lỗi kết nối khởi tạo trang SMCS: ${err.message}`
+      };
+    }
   }
 
   async lookup(phoneNumber, cookie) {
@@ -32,8 +76,22 @@ class LiveProvider extends SMCSProvider {
       };
     }
 
+    // Nếu đổi cookie mới, reset lại ViewState để khởi tạo lại
+    if (this.lastCookie !== cookie.trim()) {
+      this.lastCookie = cookie.trim();
+      this.lastViewState = null;
+    }
+
     try {
-      // Header giả lập chính xác Chrome browser
+      // Nếu chưa có ViewState, lấy trước từ trang web
+      if (!this.lastViewState) {
+        const initRes = await this.initViewState(cookie);
+        if (!initRes.success) {
+          return initRes;
+        }
+      }
+
+      // Header giả lập chính xác Chrome browser gửi request PrimeFaces AJAX
       const headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         'Accept': 'application/xml, text/xml, */*; q=0.01',
@@ -43,23 +101,30 @@ class LiveProvider extends SMCSProvider {
         'X-Requested-With': 'XMLHttpRequest',
         'Cookie': cookie.trim(),
         'Origin': this.baseUrl,
-        'Referer': `${this.baseUrl}/index.xhtml`
+        'Referer': this.lookupUrl
       };
 
-      // Payload mẫu cho PrimeFaces Tra cứu TT sản phẩm hàng hóa
-      // Sẽ được ánh xạ chính xác 100% khi khách hàng gửi cURL
+      // Payload chính xác theo cấu trúc Form tra cứu của SMCS VNPT
       const params = new URLSearchParams();
       params.append('javax.faces.partial.ajax', 'true');
+      params.append('javax.faces.source', 'form_main:btnSearch');
       params.append('javax.faces.partial.execute', '@all');
-      params.append('javax.faces.partial.render', '@all');
-      params.append('searchForm:phoneNumber', phoneNumber);
+      params.append('javax.faces.partial.render', 'form_main:panelInput form_main:tabView form_main:mes');
+      params.append('form_main:btnSearch', 'form_main:btnSearch');
+      params.append('form_main', 'form_main');
+      params.append('form_main:ddlAtributeSet_input', '4'); // Loại sản phẩm: Số thuê bao
+      params.append('form_main:productId_input', '-1');
+      params.append('form_main:serial', phoneNumber.trim()); // Serial/Số thuê bao cần tra cứu
+      params.append('form_main:checkSum_input', 'on');
+      params.append('form_main:tabView_activeIndex', '0');
+
       if (this.lastViewState) {
         params.append('javax.faces.ViewState', this.lastViewState);
       }
 
       const response = await axios.post(this.lookupUrl, params.toString(), {
         headers,
-        timeout: 10000,
+        timeout: 12000,
         validateStatus: () => true
       });
 
@@ -67,6 +132,15 @@ class LiveProvider extends SMCSProvider {
         return {
           success: false,
           error: 'Cookie đã hết hạn hoặc phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại và lấy Cookie mới.'
+        };
+      }
+
+      // Xử lý khi phiên làm việc JSF hết hạn (ViewExpiredException)
+      if (response.data && response.data.includes('ViewExpiredException')) {
+        this.lastViewState = null;
+        return {
+          success: false,
+          error: 'Phiên ViewState hết hạn, đang tự động khôi phục lại ở lượt tra tiếp theo.'
         };
       }
 
@@ -90,52 +164,80 @@ class LiveProvider extends SMCSProvider {
    * Bóc tách 4 trường từ HTML/XML của PrimeFaces
    */
   parseResponse(rawHtml, phoneNumber) {
-    const $ = cheerio.load(rawHtml, { xmlMode: true });
+    let productStatus = '';
+    let warehouse = '';
+    let updatedDate = '';
+    let viewState = '';
 
-    // Cập nhật ViewState mới nếu có trong response
-    const viewState = $('update[id*="ViewState"]').text() || $('input[name="javax.faces.ViewState"]').val();
-    if (viewState) {
-      this.lastViewState = viewState;
-    }
+    if (rawHtml && typeof rawHtml === 'string') {
+      try {
+        const $ = cheerio.load(rawHtml, { xmlMode: true });
 
-    // Bóc tách động từ DOM của PrimeFaces (hỗ trợ cả input, select, textarea và table cell)
-    let productStatus = $('[id*="trangThaiSanPham"]').val() 
-      || $('[id*="trangThai"]').val() 
-      || $('input[name*="trangThai"]').val()
-      || '';
+        // Cập nhật ViewState mới nếu có trong response
+        viewState = $('update[id*="ViewState"]').text() || $('input[name="javax.faces.ViewState"]').val() || '';
 
-    let warehouse = $('[id*="hangDangTaiKho"]').val() 
-      || $('[id*="khoHang"]').val() 
-      || $('input[name*="kho"]').val()
-      || '';
+        // Bóc tách theo ID chính xác từ SMCS PrimeFaces
+        productStatus = $('[id="form_main:tabView:product_status_master"]').val()
+          || $('[id="form_main:tabView:product_status_master"]').attr('value')
+          || $('[id*="product_status_master"]').val()
+          || $('[id*="product_status_master"]').attr('value')
+          || $('[id*="product_status_master"]').text().trim()
+          || '';
 
-    let updatedDate = $('[id*="ngayThayDoi"]').val() 
-      || $('[id*="ngayCapNhat"]').val() 
-      || $('input[name*="ngay"]').val()
-      || '';
+        warehouse = $('[id="form_main:tabView:stock_name"]').val()
+          || $('[id="form_main:tabView:stock_name"]').attr('value')
+          || $('[id*="stock_name"]').val()
+          || $('[id*="stock_name"]').attr('value')
+          || $('[id*="stock_name"]').text().trim()
+          || '';
 
-    // Nếu là text hiển thị dạng thẻ span/div/td
-    if (!productStatus) {
-      productStatus = $('[id*="trangThaiSanPham"]').text().trim() 
-        || $('[id*="trangThai"]').text().trim() 
-        || '';
-    }
-    if (!warehouse) {
-      warehouse = $('[id*="hangDangTaiKho"]').text().trim() 
-        || $('[id*="khoHang"]').text().trim() 
-        || '';
-    }
-    if (!updatedDate) {
-      updatedDate = $('[id*="ngayThayDoi"]').text().trim() 
-        || $('[id*="ngayCapNhat"]').text().trim() 
-        || '';
+        updatedDate = $('[id="form_main:tabView:change_date_input"]').val()
+          || $('[id="form_main:tabView:change_date_input"]').attr('value')
+          || $('[id*="change_date_input"]').val()
+          || $('[id*="change_date_input"]').attr('value')
+          || $('[id*="change_date"]').val()
+          || $('[id*="change_date"]').attr('value')
+          || $('[id*="change_date"]').text().trim()
+          || '';
+      } catch (e) {
+        // bỏ qua lỗi xml parse để chạy regex fallback bên dưới
+      }
+
+      // Regex fallback dự phòng trực tiếp trong CDATA nếu parser XML không bắt được
+      if (!viewState) {
+        const vsMatch = rawHtml.match(/<update id="[^"]*ViewState[^"]*"><!\[CDATA\[(.*?)\]\]><\/update>/i)
+          || rawHtml.match(/name="javax\.faces\.ViewState"[^>]*value="([^"]*)"/i);
+        if (vsMatch) viewState = vsMatch[1];
+      }
+
+      if (!productStatus) {
+        const m = rawHtml.match(/id="[^"]*product_status_master"[^>]*value="([^"]*)"/i) 
+               || rawHtml.match(/value="([^"]*)"[^>]*id="[^"]*product_status_master"/i);
+        if (m) productStatus = m[1] || m[2];
+      }
+
+      if (!warehouse) {
+        const m = rawHtml.match(/id="[^"]*stock_name"[^>]*value="([^"]*)"/i)
+               || rawHtml.match(/value="([^"]*)"[^>]*id="[^"]*stock_name"/i);
+        if (m) warehouse = m[1] || m[2];
+      }
+
+      if (!updatedDate) {
+        const m = rawHtml.match(/id="[^"]*change_date_input"[^>]*value="([^"]*)"/i)
+               || rawHtml.match(/value="([^"]*)"[^>]*id="[^"]*change_date_input"/i);
+        if (m) updatedDate = m[1] || m[2];
+      }
+
+      if (viewState) {
+        this.lastViewState = viewState;
+      }
     }
 
     return {
       phone: phoneNumber,
-      productStatus: productStatus || 'Chưa cập nhật',
-      warehouse: warehouse || 'Chưa cập nhật',
-      updatedDate: updatedDate || new Date().toLocaleString('vi-VN')
+      productStatus: (productStatus && productStatus.trim()) || 'Chưa cập nhật',
+      warehouse: (warehouse && warehouse.trim()) || 'Chưa cập nhật',
+      updatedDate: (updatedDate && updatedDate.trim()) || new Date().toLocaleString('vi-VN')
     };
   }
 }
