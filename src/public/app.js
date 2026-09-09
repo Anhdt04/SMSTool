@@ -5,7 +5,7 @@
 // State
 let appState = {
   status: 'idle', // 'idle' | 'running' | 'paused' | 'stopped' | 'completed'
-  mode: 'mock',
+  mode: 'live',
   tableData: [], // { phone, productStatus, warehouse, updatedDate, isCondition1, isCondition2, cycle }
   condition1List: [],
   sortCol: null,
@@ -15,9 +15,7 @@ let appState = {
 
 // DOM Elements
 const elements = {
-  // Mode & Status
-  btnModeMock: document.getElementById('btnModeMock'),
-  btnModeLive: document.getElementById('btnModeLive'),
+  // Status & Connection
   connectionBadge: document.getElementById('connectionBadge'),
   connectionText: document.getElementById('connectionText'),
   autoSaveIndicator: document.getElementById('autoSaveIndicator'),
@@ -31,6 +29,8 @@ const elements = {
   inputTeleToken: document.getElementById('inputTeleToken'),
   inputTeleChatId: document.getElementById('inputTeleChatId'),
   btnTestTele: document.getElementById('btnTestTele'),
+  btnResetTeleHistory: document.getElementById('btnResetTeleHistory'),
+  teleHistoryStatus: document.getElementById('teleHistoryStatus'),
 
   // Phone input & Actions
   inputPhoneList: document.getElementById('inputPhoneList'),
@@ -82,6 +82,7 @@ const SAMPLE_PHONES = [
 document.addEventListener('DOMContentLoaded', () => {
   initEventListeners();
   loadSavedSettings();
+  loadTeleHistoryStats();
   initEventSource();
 });
 
@@ -101,7 +102,6 @@ async function loadSavedSettings() {
 }
 
 function applySettingsToUI(s) {
-  if (s.mode) setMode(s.mode, false);
   if (s.cookie) elements.inputCookie.value = s.cookie;
   if (s.delayMs) elements.inputDelay.value = s.delayMs;
   if (typeof s.enableLoop === 'boolean') elements.checkLoop.checked = s.enableLoop;
@@ -179,6 +179,7 @@ function initEventSource() {
   evtSource.addEventListener('item_processed', (e) => {
     const item = JSON.parse(e.data);
     addTableRow(item);
+    loadTeleHistoryStats();
   });
 
   evtSource.addEventListener('condition1_found', (e) => {
@@ -207,10 +208,6 @@ function initEventSource() {
  * Lắng nghe các sự kiện tương tác
  */
 function initEventListeners() {
-  // Chuyển đổi chế độ Mock / Live
-  elements.btnModeMock.addEventListener('click', () => setMode('mock', true));
-  elements.btnModeLive.addEventListener('click', () => setMode('live', true));
-
   // Tự động lưu khi thay đổi form
   [elements.inputCookie, elements.inputDelay, elements.inputTeleToken, elements.inputTeleChatId].forEach(el => {
     el.addEventListener('input', triggerAutoSave);
@@ -242,8 +239,11 @@ function initEventListeners() {
   elements.btnPause.addEventListener('click', handlePause);
   elements.btnStop.addEventListener('click', handleStop);
 
-  // Test Telegram
+  // Test Telegram & Quản lý lịch sử Telegram
   elements.btnTestTele.addEventListener('click', handleTestTelegram);
+  if (elements.btnResetTeleHistory) {
+    elements.btnResetTeleHistory.addEventListener('click', handleResetTeleHistory);
+  }
 
   // Copy All Condition 1
   elements.btnCopyAllCond1.addEventListener('click', handleCopyAllCond1);
@@ -283,18 +283,44 @@ function initEventListeners() {
   });
 }
 
-function setMode(mode, triggerSave = true) {
-  appState.mode = mode;
-  if (mode === 'mock') {
-    elements.btnModeMock.classList.add('active');
-    elements.btnModeLive.classList.remove('active');
-    appendLog('info', 'Chế độ hoạt động: GIẢ LẬP (Mock) - Dữ liệu mô phỏng để kiểm thử');
-  } else {
-    elements.btnModeLive.classList.add('active');
-    elements.btnModeMock.classList.remove('active');
-    appendLog('warn', 'Chế độ hoạt động: TRỰC TIẾP (Live) - Kết nối smcs.vnpt.com.vn');
+/**
+ * Tải số lượng thông báo Telegram đã gửi
+ */
+async function loadTeleHistoryStats() {
+  try {
+    const res = await fetch('/api/telegram/history-stats');
+    const data = await res.json();
+    if (data.success && data.stats && elements.teleHistoryStatus) {
+      if (data.stats.totalAlerts > 0) {
+        elements.teleHistoryStatus.textContent = `📁 Đã lưu vết: ${data.stats.totalAlerts} thông báo (${data.stats.uniquePhones} số) - không gửi trùng khi chạy lại.`;
+      } else {
+        elements.teleHistoryStatus.textContent = '📁 Lịch sử thông báo trống (chưa có số nào được gửi).';
+      }
+    }
+  } catch (err) {}
+}
+
+/**
+ * Xử lý xóa lịch sử thông báo Telegram
+ */
+async function handleResetTeleHistory() {
+  const ok = confirm('Bạn có chắc chắn muốn xóa lịch sử các số đã gửi thông báo Telegram?\n\nSau khi xóa, nếu bạn tra cứu lại các số đó thì bot sẽ gửi lại thông báo.');
+  if (!ok) return;
+
+  try {
+    if (elements.btnResetTeleHistory) elements.btnResetTeleHistory.disabled = true;
+    const res = await fetch('/api/telegram/reset-history', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Đã xóa sạch lịch sử thông báo Telegram!', 'success');
+      appendLog('info', 'Đã đặt lại lịch sử thông báo Telegram (file sent_notifications.json đã được xóa).');
+      loadTeleHistoryStats();
+    }
+  } catch (err) {
+    showToast(`Lỗi khi xóa: ${err.message}`, 'error');
+  } finally {
+    if (elements.btnResetTeleHistory) elements.btnResetTeleHistory.disabled = false;
   }
-  if (triggerSave) triggerAutoSave();
 }
 
 function toggleTelegramBox(enable) {

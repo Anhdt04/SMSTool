@@ -4,7 +4,7 @@ const path = require('path');
 const CONFIG_FILE = path.join(process.cwd(), 'config.json');
 
 const DEFAULT_SETTINGS = {
-  mode: 'mock', // 'mock' hoặc 'live'
+  mode: 'live', // Luôn kết nối trực tiếp SMCS VNPT
   cookie: '',
   telegramToken: '',
   telegramChatId: '',

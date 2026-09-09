@@ -90,6 +90,17 @@ app.post('/api/test-telegram', async (req, res) => {
   res.json(result);
 });
 
+// API: Lấy thống kê lịch sử thông báo Telegram
+app.get('/api/telegram/history-stats', (req, res) => {
+  res.json({ success: true, stats: telegramService.getHistoryStats() });
+});
+
+// API: Xóa lịch sử thông báo Telegram để cho phép gửi lại
+app.post('/api/telegram/reset-history', (req, res) => {
+  const result = telegramService.clearHistory();
+  res.json(result);
+});
+
 // API: Bắt đầu chạy
 app.post('/api/start', async (req, res) => {
   try {

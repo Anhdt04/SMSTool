@@ -1,19 +1,83 @@
+const fs = require('fs');
+const path = require('path');
 const axios = require('axios');
 
 /**
  * Service tích hợp Telegram Bot
  * - Có cơ chế chống trùng lặp: mỗi trạng thái của 1 số chỉ gửi 1 lần duy nhất
+ * - Lưu vết bền vững vào file sent_notifications.json (không mất khi dừng/chạy lại hoặc khởi động lại)
  * - Bắt lỗi mạng an toàn để không làm gián đoạn luồng tra cứu
  */
 class TelegramService {
   constructor() {
+    this.storagePath = path.join(process.cwd(), 'sent_notifications.json');
     // Lưu lịch sử các trạng thái đã gửi: Map<phone, Set<status>>
-    // Ví dụ: Map { '84942251121' => Set { 'Sẵn sàng sử dụng', 'Đã book số' } }
     this.sentHistory = new Map();
+    this.loadHistory();
   }
 
-  reset() {
+  /**
+   * Đọc lịch sử thông báo từ file sent_notifications.json
+   */
+  loadHistory() {
+    try {
+      if (fs.existsSync(this.storagePath)) {
+        const raw = fs.readFileSync(this.storagePath, 'utf8');
+        const data = JSON.parse(raw);
+        this.sentHistory.clear();
+        for (const [phone, statuses] of Object.entries(data)) {
+          if (Array.isArray(statuses)) {
+            this.sentHistory.set(phone, new Set(statuses));
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[TelegramService] Lỗi khi đọc file sent_notifications.json:', err.message);
+    }
+  }
+
+  /**
+   * Ghi lịch sử thông báo ra file sent_notifications.json
+   */
+  saveHistory() {
+    try {
+      const exportObj = {};
+      for (const [phone, set] of this.sentHistory.entries()) {
+        exportObj[phone] = Array.from(set);
+      }
+      fs.writeFileSync(this.storagePath, JSON.stringify(exportObj, null, 2), 'utf8');
+    } catch (err) {
+      console.error('[TelegramService] Lỗi khi ghi file sent_notifications.json:', err.message);
+    }
+  }
+
+  /**
+   * Xóa toàn bộ lịch sử thông báo (để bot có thể gửi lại từ đầu)
+   */
+  clearHistory() {
     this.sentHistory.clear();
+    try {
+      if (fs.existsSync(this.storagePath)) {
+        fs.unlinkSync(this.storagePath);
+      }
+    } catch (err) {
+      console.error('[TelegramService] Lỗi khi xóa file sent_notifications.json:', err.message);
+    }
+    return { success: true, count: 0 };
+  }
+
+  /**
+   * Số lượng thông báo đã gửi
+   */
+  getHistoryStats() {
+    let totalAlerts = 0;
+    for (const set of this.sentHistory.values()) {
+      totalAlerts += set.size;
+    }
+    return {
+      uniquePhones: this.sentHistory.size,
+      totalAlerts
+    };
   }
 
   /**
@@ -25,13 +89,14 @@ class TelegramService {
   }
 
   /**
-   * Đánh dấu đã gửi
+   * Đánh dấu đã gửi và lưu xuống file
    */
   markAsSent(phone, status) {
     if (!this.sentHistory.has(phone)) {
       this.sentHistory.set(phone, new Set());
     }
     this.sentHistory.get(phone).add(status);
+    this.saveHistory();
   }
 
   /**
@@ -66,13 +131,6 @@ class TelegramService {
 
   /**
    * Xử lý thông báo theo điều kiện nghiệp vụ
-   * @param {Object} params
-   * @param {string} params.botToken
-   * @param {string} params.chatId
-   * @param {boolean} params.enableTelegram
-   * @param {string} params.phone
-   * @param {string} params.status
-   * @param {string} params.message
    */
   async notifyCondition({ botToken, chatId, enableTelegram, phone, status, message }) {
     if (!enableTelegram) {

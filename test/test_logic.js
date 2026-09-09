@@ -1,7 +1,7 @@
+const fs = require('fs');
 const parserService = require('../src/services/parserService');
 const telegramService = require('../src/services/telegramService');
 const queueService = require('../src/services/queueService');
-const MockProvider = require('../src/providers/mockProvider');
 
 async function runTests() {
   console.log('--- BẮT ĐẦU KIỂM THỬ TỰ ĐỘNG CÁC MODULE NGHIỆP VỤ ---');
@@ -48,36 +48,33 @@ async function runTests() {
   assert(cond2Eval.isCondition2 === true, 'Nhận diện chính xác ĐK 2');
   assert(cond2Eval.telegramMessage && cond2Eval.telegramMessage.includes('84942251121 | Đã book số |'), 'Định dạng tin Telegram ĐK 2 có chứa giờ thực');
 
-  // 4. Kiểm thử Chống spam Telegram (Chỉ báo 1 lần cho 1 trạng thái)
-  telegramService.reset();
-  const notify1 = await telegramService.notifyCondition({
+  // 4. Kiểm thử Chống spam Telegram & Lưu vết bền vững
+  telegramService.clearHistory();
+  assert(!telegramService.hasSent('84812000013', 'Sẵn sàng sử dụng'), 'Lịch sử ban đầu trống');
+
+  telegramService.markAsSent('84812000013', 'Sẵn sàng sử dụng');
+  assert(telegramService.hasSent('84812000013', 'Sẵn sàng sử dụng') === true, 'Đã đánh dấu gửi thành công');
+  assert(fs.existsSync(telegramService.storagePath), 'File sent_notifications.json được tự động tạo');
+
+  const notifyDuplicate = await telegramService.notifyCondition({
     enableTelegram: true,
     botToken: 'mock_token',
     chatId: 'mock_chat',
-    phone: '84942251121',
+    phone: '84812000013',
     status: 'Sẵn sàng sử dụng',
-    message: 'Test message 1'
+    message: 'Test duplicate'
   });
-  // Giả lập đã đánh dấu gửi
-  telegramService.markAsSent('84942251121', 'Sẵn sàng sử dụng');
+  assert(notifyDuplicate.skipped === true, 'Bỏ qua tin nhắn trùng trạng thái (Chỉ báo 1 lần duy nhất)');
 
-  const notify2 = await telegramService.notifyCondition({
-    enableTelegram: true,
-    botToken: 'mock_token',
-    chatId: 'mock_chat',
-    phone: '84942251121',
-    status: 'Sẵn sàng sử dụng',
-    message: 'Test message 1 lặp lại'
-  });
-  assert(notify2.skipped === true, 'Bỏ qua tin nhắn trùng trạng thái (Chỉ báo 1 lần)');
+  // 5. Kiểm thử khi queueService.start() chạy lại, lịch sử Telegram KHÔNG bị xóa
+  try {
+    await queueService.start('84812000013', { delayMs: 100 });
+  } catch (e) {}
+  assert(telegramService.hasSent('84812000013', 'Sẵn sàng sử dụng') === true, 'Khi bắt đầu lại tra cứu, lịch sử Telegram vẫn được giữ nguyên');
+  queueService.stop();
 
-  // 5. Kiểm thử Mock Provider
-  const mock = new MockProvider();
-  const mockRes1 = await mock.lookup('84942251121', 'fake_cookie');
-  assert(mockRes1.data.productStatus === 'Sẵn sàng sử dụng' && mockRes1.data.warehouse === 'Kho số chung VNP', 'Mock Provider lần 1 trả về ĐK 1');
-
-  const mockRes2 = await mock.lookup('84942251121', 'fake_cookie');
-  assert(mockRes2.data.productStatus === 'Đã book số' && mockRes2.data.warehouse === 'Kho số chung VNP', 'Mock Provider lần 2 chuyển trạng thái sang ĐK 2');
+  // Dọn dẹp file test
+  telegramService.clearHistory();
 
   console.log(`\n KẾT QUẢ KIỂM THỬ: ${passed}/${total} bài test vượt qua!`);
   if (passed === total) {

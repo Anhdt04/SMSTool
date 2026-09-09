@@ -1,7 +1,6 @@
 const EventEmitter = require('events');
 const parserService = require('./parserService');
 const telegramService = require('./telegramService');
-const MockProvider = require('../providers/mockProvider');
 const LiveProvider = require('../providers/liveProvider');
 
 /**
@@ -16,7 +15,6 @@ class QueueService extends EventEmitter {
   constructor() {
     super();
     this.status = 'idle'; // 'idle' | 'running' | 'paused' | 'stopped'
-    this.mockProvider = new MockProvider();
     this.liveProvider = new LiveProvider();
 
     // Dữ liệu hàng đợi
@@ -42,7 +40,7 @@ class QueueService extends EventEmitter {
 
     // Cấu hình hiện thời
     this.options = {
-      mode: 'mock',
+      mode: 'live',
       cookie: '',
       delayMs: 500,
       enableLoop: true,
@@ -53,7 +51,7 @@ class QueueService extends EventEmitter {
   }
 
   getProvider() {
-    return this.options.mode === 'live' ? this.liveProvider : this.mockProvider;
+    return this.liveProvider;
   }
 
   getStatus() {
@@ -89,8 +87,6 @@ class QueueService extends EventEmitter {
     this.nextCycleQueue = [];
     this.stoppedNumbers.clear();
     this.condition1Numbers = [];
-    telegramService.reset();
-    this.mockProvider.reset();
 
     this.stats = {
       total: phones.length,
@@ -107,7 +103,7 @@ class QueueService extends EventEmitter {
     this.emit('status_change', this.getStatus());
     this.emit('log', {
       type: 'info',
-      message: `Bắt đầu phiên tra cứu: ${phones.length} số | Chế độ: ${this.options.mode.toUpperCase()} | Delay: ${this.options.delayMs}ms | Xoay vòng: ${this.options.enableLoop ? 'BẬT' : 'TẮT'}`
+      message: `Bắt đầu phiên tra cứu: ${phones.length} số | Chế độ: TRỰC TIẾP SMCS | Delay: ${this.options.delayMs}ms | Xoay vòng: ${this.options.enableLoop ? 'BẬT' : 'TẮT'}`
     });
 
     this.processNext();

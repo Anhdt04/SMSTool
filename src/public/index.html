@@ -22,17 +22,9 @@
         </div>
       </div>
       <div class="header-actions">
-        <div class="mode-selector" id="modeSelectorGroup">
-          <button type="button" class="mode-btn active" id="btnModeMock" data-mode="mock" title="Chạy thử nghiệm mô phỏng">
-            <span class="dot mock"></span> Giả Lập (Mock)
-          </button>
-          <button type="button" class="mode-btn" id="btnModeLive" data-mode="live" title="Kết nối thật vào smcs.vnpt.com.vn">
-            <span class="dot live"></span> Trực Tiếp (Live)
-          </button>
-        </div>
         <div class="connection-status" id="connectionBadge">
           <span class="status-indicator ready"></span>
-          <span id="connectionText">Sẵn sàng</span>
+          <span id="connectionText">🟢 Trực Tiếp SMCS VNPT</span>
         </div>
       </div>
     </header>
@@ -100,9 +92,15 @@
                 <label for="inputTeleChatId">Telegram Chat / Group ID</label>
                 <input type="text" id="inputTeleChatId" placeholder="VD: -100123456789 hoặc @tennhom">
               </div>
-              <button type="button" class="btn btn-secondary btn-sm" id="btnTestTele">
-                🔔 Kiểm tra gửi thử Telegram
-              </button>
+              <div style="display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-top: 10px; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary btn-sm" id="btnTestTele">
+                  🔔 Gửi thử Telegram
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm text-danger" id="btnResetTeleHistory" title="Xóa danh sách các số đã gửi để bot có thể gửi lại từ đầu">
+                  🔄 Xóa lịch sử đã gửi
+                </button>
+              </div>
+              <div id="teleHistoryStatus" style="font-size: 11px; color: var(--text-muted); margin-top: 6px;"></div>
             </div>
           </div>
         </div>
