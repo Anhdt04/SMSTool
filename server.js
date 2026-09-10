@@ -187,23 +187,29 @@ app.get('/favicon.ico', (req, res) => {
   res.send(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="#2563eb"/><text x="50%" y="50%" font-size="60" text-anchor="middle" dominant-baseline="central" fill="white">📱</text></svg>`);
 });
 
-// API: Yêu cầu mở thêm 1 cửa sổ mới độc lập
+// API: Yêu cầu mở thêm 1 cửa sổ mới độc lập (luôn bật kèm cửa sổ Terminal riêng)
 app.post('/api/open-new-window', (req, res) => {
   try {
-    const { spawn } = require('child_process');
     const isExe = !process.execPath.toLowerCase().endsWith('node.exe');
-    if (isExe) {
-      spawn(process.execPath, [], {
-        detached: true,
-        stdio: 'ignore'
-      }).unref();
+    let cmd = '';
+
+    if (process.platform === 'win32') {
+      if (isExe) {
+        cmd = `cmd.exe /c start "SMCS VNPT Tool" "${process.execPath}"`;
+      } else {
+        cmd = `cmd.exe /c start "SMCS VNPT Tool" "${process.execPath}" "${path.join(__dirname, 'server.js')}"`;
+      }
+      exec(cmd, (err) => {
+        if (err) console.error('[OpenNewWindow] Lỗi khi mở cửa sổ mới:', err.message);
+      });
     } else {
-      spawn(process.execPath, [path.join(__dirname, 'server.js')], {
-        detached: true,
-        stdio: 'ignore'
-      }).unref();
+      if (isExe) {
+        exec(`"${process.execPath}" &`).unref();
+      } else {
+        exec(`node "${path.join(__dirname, 'server.js')}" &`).unref();
+      }
     }
-    res.json({ success: true, message: 'Đang mở cửa sổ mới...' });
+    res.json({ success: true, message: 'Đang mở cửa sổ mới kèm Terminal...' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
