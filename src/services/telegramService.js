@@ -84,6 +84,7 @@ class TelegramService {
    * Kiểm tra xem trạng thái này của số đã từng gửi Telegram chưa
    */
   hasSent(phone, status) {
+    this.loadHistory();
     if (!this.sentHistory.has(phone)) return false;
     return this.sentHistory.get(phone).has(status);
   }
@@ -92,6 +93,7 @@ class TelegramService {
    * Đánh dấu đã gửi và lưu xuống file
    */
   markAsSent(phone, status) {
+    this.loadHistory();
     if (!this.sentHistory.has(phone)) {
       this.sentHistory.set(phone, new Set());
     }

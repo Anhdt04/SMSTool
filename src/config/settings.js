@@ -42,6 +42,7 @@ class SettingsManager {
 
   save(newSettings) {
     try {
+      this.load();
       this.settings = { ...this.settings, ...newSettings };
       fs.writeFileSync(CONFIG_FILE, JSON.stringify(this.settings, null, 2), 'utf-8');
       return this.settings;

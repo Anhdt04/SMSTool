@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const net = require('net');
 const settingsManager = require('./src/config/settings');
 const queueService = require('./src/services/queueService');
 const telegramService = require('./src/services/telegramService');
@@ -83,7 +84,14 @@ app.get('/api/stream', (req, res) => {
   sseClients.add(res);
 
   // Gửi trạng thái ban đầu ngay khi client kết nối
-  res.write(`event: initial_state\ndata: ${JSON.stringify(queueService.getStatus())}\n\n`);
+  const statusPayload = {
+    ...queueService.getStatus(),
+    instanceInfo: {
+      port: CURRENT_PORT,
+      instanceIndex: CURRENT_PORT >= 3000 ? (CURRENT_PORT - 3000 + 1) : 1
+    }
+  };
+  res.write(`event: initial_state\ndata: ${JSON.stringify(statusPayload)}\n\n`);
 
   req.on('close', () => {
     sseClients.delete(res);
@@ -164,10 +172,42 @@ app.get('/api/status', (req, res) => {
   res.json({ success: true, status: queueService.getStatus() });
 });
 
-const PORT = process.env.PORT || settingsManager.get().port || 3000;
+// API: Lấy thông tin phiên làm việc / cửa sổ
+app.get('/api/info', (req, res) => {
+  res.json({
+    success: true,
+    port: CURRENT_PORT,
+    instanceIndex: CURRENT_PORT >= 3000 ? (CURRENT_PORT - 3000 + 1) : 1
+  });
+});
+
+let CURRENT_PORT = 3000;
 const { exec } = require('child_process');
 
-function launchDesktopApp(url) {
+function isPortAvailable(port) {
+  return new Promise((resolve) => {
+    const tester = net.createServer();
+    tester.once('error', () => {
+      resolve(false);
+    });
+    tester.once('listening', () => {
+      tester.close(() => resolve(true));
+    });
+    tester.listen(port, '0.0.0.0');
+  });
+}
+
+async function findAvailablePort(startPort = 3000, maxAttempts = 100) {
+  let port = Number(startPort) || 3000;
+  for (let i = 0; i < maxAttempts; i++) {
+    const available = await isPortAvailable(port);
+    if (available) return port;
+    port++;
+  }
+  return startPort;
+}
+
+function launchDesktopApp(url, instanceIndex = 1) {
   if (process.platform !== 'win32') {
     const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open';
     exec(`${cmd} ${url}`).unref();
@@ -175,7 +215,6 @@ function launchDesktopApp(url) {
   }
 
   const fs = require('fs');
-  const path = require('path');
 
   // Danh sách đường dẫn Chrome và Edge trên Windows
   const browserCandidates = [
@@ -198,9 +237,8 @@ function launchDesktopApp(url) {
   }
 
   if (selectedBrowser) {
-    // Mở ở chế độ Application Window (--app), kích thước chuẩn Desktop
-    // Không có thanh địa chỉ URL, không có thanh tab hay bookmark, như app riêng biệt
-    const appCommand = `"${selectedBrowser}" --app="${url}" --window-size=1440,920`;
+    // Mở ở chế độ Application Window (--app), thêm --new-window để mở độc lập
+    const appCommand = `"${selectedBrowser}" --app="${url}" --new-window --window-size=1440,920`;
     exec(appCommand, (err) => {
       if (err) {
         exec(`start ${url}`).unref();
@@ -212,23 +250,31 @@ function launchDesktopApp(url) {
   }
 }
 
-app.listen(PORT, () => {
-  console.log(`=================================================`);
-  console.log(`🚀 SMCS VNPT Lookup Tool - Ứng Dụng Độc Lập`);
-  console.log(`👉 Cửa sổ ứng dụng đang được khởi chạy...`);
-  console.log(`ℹ️ Đóng cửa sổ ứng dụng để thoát chương trình.`);
-  console.log(`=================================================`);
+async function startServer() {
+  const basePort = Number(process.env.PORT) || Number(settingsManager.get().port) || 3000;
+  CURRENT_PORT = await findAvailablePort(basePort, 100);
+  const instanceIndex = CURRENT_PORT >= 3000 ? (CURRENT_PORT - 3000 + 1) : 1;
 
-  // Đổi tiêu đề console
-  if (process.platform === 'win32') {
-    try { process.title = 'SMCS VNPT Tool - Running'; } catch (e) {}
-  }
+  app.listen(CURRENT_PORT, () => {
+    console.log(`=================================================`);
+    console.log(`🚀 SMCS VNPT Lookup Tool - Cửa Sổ ${instanceIndex} (Port: ${CURRENT_PORT})`);
+    console.log(`👉 Đang khởi chạy cửa sổ ứng dụng độc lập...`);
+    console.log(`ℹ️ Đóng cửa sổ ứng dụng để thoát tiến trình này.`);
+    console.log(`=================================================`);
 
-  // Tự động mở cửa sổ App Window riêng biệt
-  launchDesktopApp(`http://localhost:${PORT}`);
+    // Đổi tiêu đề console
+    if (process.platform === 'win32') {
+      try { process.title = `SMCS Tool - Cửa Sổ ${instanceIndex} (${CURRENT_PORT})`; } catch (e) {}
+    }
 
-  // Sau 25 giây khởi động, bắt đầu giám sát để tự tắt khi người dùng đóng cửa sổ app
-  setTimeout(() => {
-    checkAutoShutdown();
-  }, 25000);
-});
+    // Tự động mở cửa sổ App Window riêng biệt
+    launchDesktopApp(`http://localhost:${CURRENT_PORT}`, instanceIndex);
+
+    // Sau 25 giây khởi động, bắt đầu giám sát để tự tắt khi người dùng đóng cửa sổ app
+    setTimeout(() => {
+      checkAutoShutdown();
+    }, 25000);
+  });
+}
+
+startServer();

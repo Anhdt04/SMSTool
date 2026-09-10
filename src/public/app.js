@@ -208,6 +208,20 @@ function initEventSource() {
 
   evtSource.addEventListener('initial_state', (e) => {
     const state = JSON.parse(e.data);
+    if (state.instanceInfo) {
+      const idx = state.instanceInfo.instanceIndex || 1;
+      const port = state.instanceInfo.port || 3000;
+      document.title = `SMCS Tra Cứu - Cửa Sổ ${idx}`;
+      const badge = document.getElementById('instanceBadge');
+      if (badge) {
+        badge.textContent = `💻 Cửa Sổ ${idx} (Port: ${port})`;
+        if (idx > 1) {
+          badge.style.background = 'rgba(16, 185, 129, 0.18)';
+          badge.style.borderColor = 'rgba(16, 185, 129, 0.45)';
+          badge.style.color = '#a7f3d0';
+        }
+      }
+    }
     updateRuntimeStatus(state.status);
     if (state.stats) updateStats(state.stats);
     if (state.condition1Items && state.condition1Items.length > 0) {

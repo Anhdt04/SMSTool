@@ -148,6 +148,21 @@ body {
 .dot.mock { background: #38bdf8; box-shadow: 0 0 8px #38bdf8; }
 .dot.live { background: #10b981; box-shadow: 0 0 8px #10b981; }
 
+.instance-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(37, 99, 235, 0.15);
+  border: 1px solid rgba(37, 99, 235, 0.4);
+  color: #93c5fd;
+  padding: 6px 14px;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.15);
+}
+
 .connection-status {
   display: flex;
   align-items: center;
