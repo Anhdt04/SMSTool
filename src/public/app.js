@@ -21,6 +21,7 @@ const elements = {
   connectionBadge: document.getElementById('connectionBadge'),
   connectionText: document.getElementById('connectionText'),
   autoSaveIndicator: document.getElementById('autoSaveIndicator'),
+  btnOpenNewWindow: document.getElementById('btnOpenNewWindow'),
 
   // Form Controls
   inputCookie: document.getElementById('inputCookie'),
@@ -303,6 +304,32 @@ function initEventListeners() {
   // Nút Lưu Cấu Hình Hệ Thống
   if (elements.btnSaveConfig) {
     elements.btnSaveConfig.addEventListener('click', () => saveSettings(true));
+  }
+
+  // Nút Mở Cửa Sổ Mới
+  if (elements.btnOpenNewWindow) {
+    elements.btnOpenNewWindow.addEventListener('click', async () => {
+      try {
+        elements.btnOpenNewWindow.disabled = true;
+        elements.btnOpenNewWindow.textContent = '⏳ Đang mở...';
+        const res = await fetch('/api/open-new-window', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          showToast('🚀 Đang mở cửa sổ ứng dụng mới...', 'success');
+        } else {
+          showToast(`Không thể mở cửa sổ mới: ${data.error}`, 'error');
+        }
+      } catch (err) {
+        showToast(`Lỗi: ${err.message}`, 'error');
+      } finally {
+        setTimeout(() => {
+          if (elements.btnOpenNewWindow) {
+            elements.btnOpenNewWindow.disabled = false;
+            elements.btnOpenNewWindow.textContent = '➕ Mở Cửa Sổ Mới';
+          }
+        }, 2000);
+      }
+    });
   }
 
   // Điều khiển

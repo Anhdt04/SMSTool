@@ -181,30 +181,51 @@ app.get('/api/info', (req, res) => {
   });
 });
 
+// API: Phục vụ Favicon để tránh hiển thị quả địa cầu mặc định
+app.get('/favicon.ico', (req, res) => {
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.send(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="#2563eb"/><text x="50%" y="50%" font-size="60" text-anchor="middle" dominant-baseline="central" fill="white">📱</text></svg>`);
+});
+
+// API: Yêu cầu mở thêm 1 cửa sổ mới độc lập
+app.post('/api/open-new-window', (req, res) => {
+  try {
+    const { spawn } = require('child_process');
+    const isExe = !process.execPath.toLowerCase().endsWith('node.exe');
+    if (isExe) {
+      spawn(process.execPath, [], {
+        detached: true,
+        stdio: 'ignore'
+      }).unref();
+    } else {
+      spawn(process.execPath, [path.join(__dirname, 'server.js')], {
+        detached: true,
+        stdio: 'ignore'
+      }).unref();
+    }
+    res.json({ success: true, message: 'Đang mở cửa sổ mới...' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 let CURRENT_PORT = 3000;
 const { exec } = require('child_process');
 
-function isPortAvailable(port) {
+function tryListen(port) {
   return new Promise((resolve) => {
-    const tester = net.createServer();
-    tester.once('error', () => {
-      resolve(false);
+    const server = app.listen(port, () => {
+      resolve(server);
     });
-    tester.once('listening', () => {
-      tester.close(() => resolve(true));
+    server.once('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        resolve(null);
+      } else {
+        console.error('Lỗi cổng ' + port + ':', err.message);
+        resolve(null);
+      }
     });
-    tester.listen(port, '0.0.0.0');
   });
-}
-
-async function findAvailablePort(startPort = 3000, maxAttempts = 100) {
-  let port = Number(startPort) || 3000;
-  for (let i = 0; i < maxAttempts; i++) {
-    const available = await isPortAvailable(port);
-    if (available) return port;
-    port++;
-  }
-  return startPort;
 }
 
 function launchDesktopApp(url, instanceIndex = 1) {
@@ -252,29 +273,41 @@ function launchDesktopApp(url, instanceIndex = 1) {
 
 async function startServer() {
   const basePort = Number(process.env.PORT) || Number(settingsManager.get().port) || 3000;
-  CURRENT_PORT = await findAvailablePort(basePort, 100);
+  let port = basePort;
+  let server = null;
+
+  for (let i = 0; i < 100; i++) {
+    server = await tryListen(port);
+    if (server) break;
+    port++;
+  }
+
+  if (!server) {
+    console.error('Không tìm thấy cổng mạng khả dụng để khởi chạy.');
+    process.exit(1);
+  }
+
+  CURRENT_PORT = port;
   const instanceIndex = CURRENT_PORT >= 3000 ? (CURRENT_PORT - 3000 + 1) : 1;
 
-  app.listen(CURRENT_PORT, () => {
-    console.log(`=================================================`);
-    console.log(`🚀 SMCS VNPT Lookup Tool - Cửa Sổ ${instanceIndex} (Port: ${CURRENT_PORT})`);
-    console.log(`👉 Đang khởi chạy cửa sổ ứng dụng độc lập...`);
-    console.log(`ℹ️ Đóng cửa sổ ứng dụng để thoát tiến trình này.`);
-    console.log(`=================================================`);
+  console.log(`=================================================`);
+  console.log(`🚀 SMCS VNPT Lookup Tool - Cửa Sổ ${instanceIndex} (Port: ${CURRENT_PORT})`);
+  console.log(`👉 Đang khởi chạy cửa sổ ứng dụng độc lập...`);
+  console.log(`ℹ️ Đóng cửa sổ ứng dụng để thoát tiến trình này.`);
+  console.log(`=================================================`);
 
-    // Đổi tiêu đề console
-    if (process.platform === 'win32') {
-      try { process.title = `SMCS Tool - Cửa Sổ ${instanceIndex} (${CURRENT_PORT})`; } catch (e) {}
-    }
+  // Đổi tiêu đề console
+  if (process.platform === 'win32') {
+    try { process.title = `SMCS Tool - Cửa Sổ ${instanceIndex} (${CURRENT_PORT})`; } catch (e) {}
+  }
 
-    // Tự động mở cửa sổ App Window riêng biệt
-    launchDesktopApp(`http://localhost:${CURRENT_PORT}`, instanceIndex);
+  // Tự động mở cửa sổ App Window riêng biệt
+  launchDesktopApp(`http://localhost:${CURRENT_PORT}`, instanceIndex);
 
-    // Sau 25 giây khởi động, bắt đầu giám sát để tự tắt khi người dùng đóng cửa sổ app
-    setTimeout(() => {
-      checkAutoShutdown();
-    }, 25000);
-  });
+  // Sau 25 giây khởi động, bắt đầu giám sát để tự tắt khi người dùng đóng cửa sổ app
+  setTimeout(() => {
+    checkAutoShutdown();
+  }, 25000);
 }
 
 startServer();
