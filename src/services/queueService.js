@@ -23,6 +23,7 @@ class QueueService extends EventEmitter {
     this.nextCycleQueue = [];      // Hàng đợi các số chuẩn bị cho chu kỳ xoay vòng tiếp theo
     this.stoppedNumbers = new Set(); // Các số đã gặp ĐK 2, bị ngừng tra cứu ở các vòng sau
     this.condition1Numbers = [];  // Danh sách các số đạt ĐK 1 (dùng cho ô copy nhanh)
+    this.condition1Items = [];    // Danh sách đối tượng { phone, updatedDate } để hiển thị ô riêng
 
     // Thống kê
     this.stats = {
@@ -64,6 +65,7 @@ class QueueService extends EventEmitter {
         stoppedCount: this.stoppedNumbers.size
       },
       condition1Numbers: [...this.condition1Numbers],
+      condition1Items: [...this.condition1Items],
       options: this.options
     };
   }
@@ -87,6 +89,7 @@ class QueueService extends EventEmitter {
     this.nextCycleQueue = [];
     this.stoppedNumbers.clear();
     this.condition1Numbers = [];
+    this.condition1Items = [];
 
     this.stats = {
       total: phones.length,
@@ -220,10 +223,17 @@ class QueueService extends EventEmitter {
 
           // Thêm vào ô copy nhanh nếu chưa có
           if (!this.condition1Numbers.includes(currentPhone)) {
+            const itemObj = {
+              phone: currentPhone,
+              updatedDate: data.updatedDate || new Date().toLocaleString('vi-VN')
+            };
             this.condition1Numbers.push(currentPhone);
+            this.condition1Items.push(itemObj);
             this.emit('condition1_found', {
               phone: currentPhone,
-              allCondition1: this.condition1Numbers
+              updatedDate: itemObj.updatedDate,
+              item: itemObj,
+              allCondition1: this.condition1Items
             });
           }
 

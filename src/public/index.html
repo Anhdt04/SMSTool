@@ -102,6 +102,11 @@
               </div>
               <div id="teleHistoryStatus" style="font-size: 11px; color: var(--text-muted); margin-top: 6px;"></div>
             </div>
+
+            <!-- Nút Lưu Cấu Hình Hệ Thống -->
+            <button type="button" class="btn btn-primary" id="btnSaveConfig" style="width: 100%; margin-top: 14px;">
+              💾 Lưu Cấu Hình Hệ Thống
+            </button>
           </div>
         </div>
 
@@ -171,22 +176,50 @@
           </div>
         </div>
 
-        <!-- Ô RIÊNG: SAO CHÉP NHANH SỐ ĐK 1 (Yêu cầu đặc biệt của khách hàng) -->
+        <!-- Ô RIÊNG: SAO CHÉP NHANH SỐ ĐK 1 (Hiển thị hàng dọc, kèm ngày thay đổi, sắp xếp, xóa từng hàng/tất cả) -->
         <div class="glass-card quick-copy-card">
           <div class="card-header highlight">
             <div class="title-with-badge">
               <h2>🎯 Ô Riêng: Số Đạt ĐK 1 (Kho VNP & Sẵn Sàng Sử Dụng)</h2>
               <span class="badge-pill" id="badgeCond1Count">0 số</span>
             </div>
-            <button type="button" class="btn btn-accent btn-sm" id="btnCopyAllCond1" title="Sao chép toàn bộ số trong ô này để dán vào việc khác">
-              📋 Sao Chép Tất Cả
-            </button>
+            <div class="cond1-actions-header">
+              <select id="selectSortCond1" class="sort-select-sm" title="Sắp xếp danh sách ĐK 1">
+                <option value="default">Sắp xếp: Mặc định</option>
+                <option value="phone-asc">Số: Tăng dần ⬆</option>
+                <option value="phone-desc">Số: Giảm dần ⬇</option>
+                <option value="date-desc">Ngày: Mới nhất ⬇</option>
+                <option value="date-asc">Ngày: Cũ nhất ⬆</option>
+              </select>
+              <button type="button" class="btn btn-accent btn-sm" id="btnCopyAllCond1" title="Sao chép toàn bộ số trong ô này để dán vào việc khác">
+                📋 Sao Chép Tất Cả
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm text-danger" id="btnClearAllCond1" title="Xóa toàn bộ số khỏi ô riêng này">
+                🗑️ Xóa Tất Cả
+              </button>
+            </div>
           </div>
-          <div class="card-body">
-            <div class="quick-copy-container" id="cond1Container">
-              <div class="empty-state" id="emptyCond1">
-                Chưa có số nào thỏa mãn ĐK 1. Khi tìm thấy số sẵn sàng sử dụng tại Kho chung VNP, số sẽ tự động xuất hiện tại đây để bạn click copy ngay lập tức.
-              </div>
+          <div class="card-body cond1-body-custom">
+            <div class="cond1-table-wrapper">
+              <table class="cond1-table" id="cond1Table">
+                <thead>
+                  <tr>
+                    <th class="col-stt">STT</th>
+                    <th class="col-phone sortable-th" id="thCond1Phone" data-col="phone">
+                      Số Thuê Bao <span class="sort-icon">⇅</span>
+                    </th>
+                    <th class="col-date sortable-th" id="thCond1Date" data-col="date">
+                      Ngày Thay Đổi <span class="sort-icon">⇅</span>
+                    </th>
+                    <th class="col-action">Thao Tác</th>
+                  </tr>
+                </thead>
+                <tbody id="cond1TableBody">
+                  <tr class="empty-row" id="emptyCond1Row">
+                    <td colspan="4">Chưa có số nào thỏa mãn ĐK 1. Khi tìm thấy số sẵn sàng sử dụng tại Kho chung VNP, số sẽ xuất hiện tại đây theo từng hàng dọc.</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

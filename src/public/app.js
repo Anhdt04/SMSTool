@@ -7,7 +7,9 @@ let appState = {
   status: 'idle', // 'idle' | 'running' | 'paused' | 'stopped' | 'completed'
   mode: 'live',
   tableData: [], // { phone, productStatus, warehouse, updatedDate, isCondition1, isCondition2, cycle }
-  condition1List: [],
+  condition1Items: [], // [{ phone, updatedDate }]
+  sortCond1Col: 'default',
+  sortCond1Asc: true,
   sortCol: null,
   sortAsc: true,
   searchKeyword: ''
@@ -31,6 +33,7 @@ const elements = {
   btnTestTele: document.getElementById('btnTestTele'),
   btnResetTeleHistory: document.getElementById('btnResetTeleHistory'),
   teleHistoryStatus: document.getElementById('teleHistoryStatus'),
+  btnSaveConfig: document.getElementById('btnSaveConfig'),
 
   // Phone input & Actions
   inputPhoneList: document.getElementById('inputPhoneList'),
@@ -47,11 +50,16 @@ const elements = {
   valCond1: document.getElementById('valCond1'),
   valCond2: document.getElementById('valCond2'),
 
-  // Quick Copy
-  cond1Container: document.getElementById('cond1Container'),
-  emptyCond1: document.getElementById('emptyCond1'),
+  // Ô Riêng ĐK 1
   badgeCond1Count: document.getElementById('badgeCond1Count'),
+  selectSortCond1: document.getElementById('selectSortCond1'),
   btnCopyAllCond1: document.getElementById('btnCopyAllCond1'),
+  btnClearAllCond1: document.getElementById('btnClearAllCond1'),
+  cond1Table: document.getElementById('cond1Table'),
+  cond1TableBody: document.getElementById('cond1TableBody'),
+  emptyCond1Row: document.getElementById('emptyCond1Row'),
+  thCond1Phone: document.getElementById('thCond1Phone'),
+  thCond1Date: document.getElementById('thCond1Date'),
 
   // Table
   cycleBadge: document.getElementById('cycleBadge'),
@@ -87,18 +95,34 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /**
- * Tải cài đặt đã lưu từ Backend
+ * Tải cài đặt đã lưu từ Backend kết hợp LocalStorage của trình duyệt
  */
 async function loadSavedSettings() {
+  let serverSettings = null;
   try {
     const res = await fetch('/api/settings');
     const data = await res.json();
     if (data.success && data.settings) {
-      applySettingsToUI(data.settings);
+      serverSettings = data.settings;
     }
   } catch (err) {
-    console.warn('Không thể tải cài đặt:', err);
+    console.warn('Không thể tải cài đặt từ server:', err);
   }
+
+  // Đọc từ LocalStorage trình duyệt phòng khi server chưa có hoặc mới mở lại
+  let localSettings = null;
+  try {
+    const raw = localStorage.getItem('smcs_settings');
+    if (raw) localSettings = JSON.parse(raw);
+  } catch (err) {}
+
+  const merged = { ...(localSettings || {}), ...(serverSettings || {}) };
+  // Nếu server có trường rỗng nhưng localStorage có giá trị thì lấy từ local
+  if (!merged.cookie && localSettings?.cookie) merged.cookie = localSettings.cookie;
+  if (!merged.telegramToken && localSettings?.telegramToken) merged.telegramToken = localSettings.telegramToken;
+  if (!merged.telegramChatId && localSettings?.telegramChatId) merged.telegramChatId = localSettings.telegramChatId;
+
+  applySettingsToUI(merged);
 }
 
 function applySettingsToUI(s) {
@@ -114,33 +138,54 @@ function applySettingsToUI(s) {
 }
 
 /**
- * Tự động lưu cài đặt
+ * Lưu cài đặt vào cả Server (config.json) và LocalStorage
  */
 let saveTimeout = null;
 function triggerAutoSave() {
   if (saveTimeout) clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(() => {
+    saveSettings(false);
+  }, 600);
+}
+
+async function saveSettings(manual = false) {
+  const payload = getFormSettings();
+
+  // 1. Lưu vào LocalStorage trình duyệt ngay lập tức
+  try {
+    localStorage.setItem('smcs_settings', JSON.stringify(payload));
+  } catch (e) {}
+
   elements.autoSaveIndicator.textContent = 'Đang lưu...';
   elements.autoSaveIndicator.style.color = 'var(--warning)';
 
-  saveTimeout = setTimeout(async () => {
-    const payload = getFormSettings();
-    try {
-      await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      elements.autoSaveIndicator.textContent = 'Đã lưu';
-      elements.autoSaveIndicator.style.color = 'var(--success)';
-      setTimeout(() => {
-        elements.autoSaveIndicator.textContent = 'Tự động lưu';
-        elements.autoSaveIndicator.style.color = 'var(--accent-glow)';
-      }, 2000);
-    } catch (err) {
-      elements.autoSaveIndicator.textContent = 'Lỗi lưu';
-      elements.autoSaveIndicator.style.color = 'var(--danger)';
+  // 2. Lưu vào backend config.json
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    elements.autoSaveIndicator.textContent = 'Đã lưu';
+    elements.autoSaveIndicator.style.color = 'var(--success)';
+
+    if (manual) {
+      showToast('💾 Đã lưu cấu hình hệ thống thành công (vào máy & trình duyệt)!', 'success');
+      appendLog('success', 'Đã lưu cấu hình vào config.json và bộ nhớ trình duyệt.');
     }
-  }, 600);
+
+    setTimeout(() => {
+      elements.autoSaveIndicator.textContent = 'Tự động lưu';
+      elements.autoSaveIndicator.style.color = 'var(--accent-glow)';
+    }, 2000);
+  } catch (err) {
+    elements.autoSaveIndicator.textContent = 'Lỗi lưu';
+    elements.autoSaveIndicator.style.color = 'var(--danger)';
+    if (manual) {
+      showToast(`Lỗi lưu cấu hình: ${err.message}`, 'error');
+    }
+  }
 }
 
 function getFormSettings() {
@@ -165,8 +210,15 @@ function initEventSource() {
     const state = JSON.parse(e.data);
     updateRuntimeStatus(state.status);
     if (state.stats) updateStats(state.stats);
-    if (state.condition1Numbers) {
-      state.condition1Numbers.forEach(p => addCondition1Tag(p));
+    if (state.condition1Items && state.condition1Items.length > 0) {
+      appState.condition1Items = [...state.condition1Items];
+      renderCondition1Table();
+    } else if (state.condition1Numbers && state.condition1Numbers.length > 0) {
+      appState.condition1Items = state.condition1Numbers.map(p => ({
+        phone: p,
+        updatedDate: new Date().toLocaleString('vi-VN')
+      }));
+      renderCondition1Table();
     }
   });
 
@@ -184,7 +236,7 @@ function initEventSource() {
 
   evtSource.addEventListener('condition1_found', (e) => {
     const data = JSON.parse(e.data);
-    addCondition1Tag(data.phone);
+    addCondition1Item(data.phone, data.updatedDate);
     showToast(`🟢 Tìm thấy số ĐK 1: ${data.phone}`, 'success');
   });
 
@@ -234,6 +286,11 @@ function initEventListeners() {
     updatePhoneInputCount();
   });
 
+  // Nút Lưu Cấu Hình Hệ Thống
+  if (elements.btnSaveConfig) {
+    elements.btnSaveConfig.addEventListener('click', () => saveSettings(true));
+  }
+
   // Điều khiển
   elements.btnStart.addEventListener('click', handleStart);
   elements.btnPause.addEventListener('click', handlePause);
@@ -245,8 +302,53 @@ function initEventListeners() {
     elements.btnResetTeleHistory.addEventListener('click', handleResetTeleHistory);
   }
 
-  // Copy All Condition 1
-  elements.btnCopyAllCond1.addEventListener('click', handleCopyAllCond1);
+  // Ô Riêng ĐK 1: Sắp xếp, Copy tất cả, Xóa tất cả
+  if (elements.selectSortCond1) {
+    elements.selectSortCond1.addEventListener('change', (e) => {
+      setCond1Sort(e.target.value);
+    });
+  }
+
+  if (elements.thCond1Phone) {
+    elements.thCond1Phone.addEventListener('click', () => {
+      toggleCond1HeaderSort('phone');
+    });
+  }
+
+  if (elements.thCond1Date) {
+    elements.thCond1Date.addEventListener('click', () => {
+      toggleCond1HeaderSort('date');
+    });
+  }
+
+  if (elements.btnCopyAllCond1) {
+    elements.btnCopyAllCond1.addEventListener('click', handleCopyAllCond1);
+  }
+
+  if (elements.btnClearAllCond1) {
+    elements.btnClearAllCond1.addEventListener('click', handleClearAllCond1);
+  }
+
+  // Event delegation cho các nút Sao Chép và Xóa từng hàng trong bảng ĐK 1
+  if (elements.cond1TableBody) {
+    elements.cond1TableBody.addEventListener('click', (e) => {
+      const btnCopy = e.target.closest('.btn-cell-copy');
+      const btnDelete = e.target.closest('.btn-cell-delete');
+
+      if (btnCopy) {
+        const phone = btnCopy.dataset.phone;
+        if (phone) {
+          navigator.clipboard.writeText(phone);
+          showToast(`Đã sao chép: ${phone}`, 'success');
+        }
+      } else if (btnDelete) {
+        const phone = btnDelete.dataset.phone;
+        if (phone) {
+          removeCondition1Item(phone);
+        }
+      }
+    });
+  }
 
   // Copy ra Excel
   elements.btnExportExcel.addEventListener('click', handleExportExcel);
@@ -468,38 +570,145 @@ function updateStats(stats) {
 }
 
 /**
- * Thêm số vào ô Copy nhanh ĐK 1
+ * Quản lý và hiển thị Bảng Ô Riêng ĐK 1 (Hàng dọc, sắp xếp, xóa từng số, xóa tất cả)
  */
-function addCondition1Tag(phone) {
-  if (appState.condition1List.includes(phone)) return;
-  appState.condition1List.push(phone);
-
-  if (elements.emptyCond1) {
-    elements.emptyCond1.style.display = 'none';
+function addCondition1Item(phone, updatedDate) {
+  const existing = appState.condition1Items.find(x => x.phone === phone);
+  if (!existing) {
+    appState.condition1Items.push({
+      phone,
+      updatedDate: updatedDate || new Date().toLocaleString('vi-VN')
+    });
+    renderCondition1Table();
   }
+}
 
-  elements.badgeCond1Count.textContent = `${appState.condition1List.length} số`;
+function removeCondition1Item(phone) {
+  appState.condition1Items = appState.condition1Items.filter(x => x.phone !== phone);
+  renderCondition1Table();
+  showToast(`Đã xóa số ${phone} khỏi ô riêng`, 'info');
+}
 
-  const tag = document.createElement('div');
-  tag.className = 'phone-tag';
-  tag.innerHTML = `<span>${phone}</span><span class="copy-icon">📋</span>`;
-  tag.title = 'Bấm để sao chép số này';
-  tag.addEventListener('click', () => {
-    navigator.clipboard.writeText(phone);
-    showToast(`Đã sao chép: ${phone}`, 'success');
-  });
+function handleClearAllCond1() {
+  if (appState.condition1Items.length === 0) {
+    showToast('Ô ĐK 1 đang trống', 'info');
+    return;
+  }
+  const ok = confirm(`Bạn có chắc muốn xóa toàn bộ ${appState.condition1Items.length} số khỏi ô riêng này?`);
+  if (!ok) return;
 
-  elements.cond1Container.appendChild(tag);
+  appState.condition1Items = [];
+  renderCondition1Table();
+  showToast('Đã xóa tất cả các số khỏi ô ĐK 1', 'info');
 }
 
 function handleCopyAllCond1() {
-  if (appState.condition1List.length === 0) {
-    showToast('Chưa có số nào trong ô ĐK 1', 'error');
+  if (appState.condition1Items.length === 0) {
+    showToast('Chưa có số nào trong ô ĐK 1 để sao chép', 'error');
     return;
   }
-  const allText = appState.condition1List.join('\n');
-  navigator.clipboard.writeText(allText);
-  showToast(`Đã sao chép tất cả ${appState.condition1List.length} số ĐK 1!`, 'success');
+  const allPhones = appState.condition1Items.map(x => x.phone).join('\n');
+  navigator.clipboard.writeText(allPhones);
+  showToast(`Đã sao chép toàn bộ ${appState.condition1Items.length} số ĐK 1!`, 'success');
+}
+
+function parseDateForSort(dateStr) {
+  if (!dateStr) return 0;
+  // Hỗ trợ dạng: "DD/MM/YYYY HH:mm:ss" hoặc "YYYY-MM-DD"
+  const parts = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{1,2}):(\d{1,2}))?/);
+  if (parts) {
+    const d = parseInt(parts[1], 10);
+    const m = parseInt(parts[2], 10) - 1;
+    const y = parseInt(parts[3], 10);
+    const hh = parseInt(parts[4] || 0, 10);
+    const mm = parseInt(parts[5] || 0, 10);
+    const ss = parseInt(parts[6] || 0, 10);
+    return new Date(y, m, d, hh, mm, ss).getTime();
+  }
+  const t = Date.parse(dateStr);
+  return isNaN(t) ? 0 : t;
+}
+
+function setCond1Sort(sortVal) {
+  appState.sortCond1Col = sortVal;
+  renderCondition1Table();
+}
+
+function toggleCond1HeaderSort(col) {
+  if (col === 'phone') {
+    if (appState.sortCond1Col === 'phone-asc') {
+      setCond1Sort('phone-desc');
+      if (elements.selectSortCond1) elements.selectSortCond1.value = 'phone-desc';
+    } else {
+      setCond1Sort('phone-asc');
+      if (elements.selectSortCond1) elements.selectSortCond1.value = 'phone-asc';
+    }
+  } else if (col === 'date') {
+    if (appState.sortCond1Col === 'date-desc') {
+      setCond1Sort('date-asc');
+      if (elements.selectSortCond1) elements.selectSortCond1.value = 'date-asc';
+    } else {
+      setCond1Sort('date-desc');
+      if (elements.selectSortCond1) elements.selectSortCond1.value = 'date-desc';
+    }
+  }
+}
+
+function renderCondition1Table() {
+  if (!elements.cond1TableBody) return;
+
+  const count = appState.condition1Items.length;
+  if (elements.badgeCond1Count) {
+    elements.badgeCond1Count.textContent = `${count} số`;
+  }
+
+  if (count === 0) {
+    elements.cond1TableBody.innerHTML = `
+      <tr class="empty-row" id="emptyCond1Row">
+        <td colspan="4" style="text-align: center; padding: 24px; color: var(--text-muted); font-style: italic;">
+          Chưa có số nào thỏa mãn ĐK 1. Khi tìm thấy số sẵn sàng sử dụng tại Kho chung VNP, số sẽ xuất hiện tại đây theo từng hàng dọc.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  // Sao chép và sắp xếp
+  let items = [...appState.condition1Items];
+  const sort = appState.sortCond1Col;
+
+  if (sort === 'phone-asc') {
+    items.sort((a, b) => a.phone.localeCompare(b.phone));
+  } else if (sort === 'phone-desc') {
+    items.sort((a, b) => b.phone.localeCompare(a.phone));
+  } else if (sort === 'date-desc') {
+    items.sort((a, b) => parseDateForSort(b.updatedDate) - parseDateForSort(a.updatedDate));
+  } else if (sort === 'date-asc') {
+    items.sort((a, b) => parseDateForSort(a.updatedDate) - parseDateForSort(b.updatedDate));
+  }
+
+  // Render HTML
+  const rowsHtml = items.map((item, index) => {
+    return `
+      <tr>
+        <td class="col-stt">${index + 1}</td>
+        <td class="col-phone">${item.phone}</td>
+        <td class="col-date">${item.updatedDate || '--:--:--'}</td>
+        <td class="col-action">
+          <div class="cond1-action-buttons">
+            <button type="button" class="btn-cell-copy" data-phone="${item.phone}" title="Sao chép số ${item.phone}">
+              📋 Sao chép
+            </button>
+            <button type="button" class="btn-cell-delete" data-phone="${item.phone}" title="Xóa số ${item.phone} khỏi ô riêng">
+              🗑️ Xóa
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  elements.cond1TableBody.innerHTML = rowsHtml;
 }
 
 /**
