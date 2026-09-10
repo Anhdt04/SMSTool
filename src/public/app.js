@@ -337,9 +337,11 @@ function initEventListeners() {
 
       if (btnCopy) {
         const phone = btnCopy.dataset.phone;
+        const date = btnCopy.dataset.date || '';
         if (phone) {
-          navigator.clipboard.writeText(phone);
-          showToast(`Đã sao chép: ${phone}`, 'success');
+          const textToCopy = date ? `${phone}\t${date}` : phone;
+          navigator.clipboard.writeText(textToCopy);
+          showToast(`Đã sao chép: ${phone}${date ? ' - ' + date : ''}`, 'success');
         }
       } else if (btnDelete) {
         const phone = btnDelete.dataset.phone;
@@ -602,14 +604,32 @@ function handleClearAllCond1() {
   showToast('Đã xóa tất cả các số khỏi ô ĐK 1', 'info');
 }
 
+function getSortedCondition1Items() {
+  let items = [...appState.condition1Items];
+  const sort = appState.sortCond1Col;
+
+  if (sort === 'phone-asc') {
+    items.sort((a, b) => a.phone.localeCompare(b.phone, 'vi', { numeric: true }));
+  } else if (sort === 'phone-desc') {
+    items.sort((a, b) => b.phone.localeCompare(a.phone, 'vi', { numeric: true }));
+  } else if (sort === 'date-desc') {
+    items.sort((a, b) => parseDateForSort(b.updatedDate) - parseDateForSort(a.updatedDate));
+  } else if (sort === 'date-asc') {
+    items.sort((a, b) => parseDateForSort(a.updatedDate) - parseDateForSort(b.updatedDate));
+  }
+  return items;
+}
+
 function handleCopyAllCond1() {
-  if (appState.condition1Items.length === 0) {
+  const items = getSortedCondition1Items();
+  if (items.length === 0) {
     showToast('Chưa có số nào trong ô ĐK 1 để sao chép', 'error');
     return;
   }
-  const allPhones = appState.condition1Items.map(x => x.phone).join('\n');
-  navigator.clipboard.writeText(allPhones);
-  showToast(`Đã sao chép toàn bộ ${appState.condition1Items.length} số ĐK 1!`, 'success');
+  // Sao chép cả số điện thoại và ngày thay đổi theo đúng thứ tự hiển thị (tab-delimited để dán vào Excel thành 2 cột)
+  const allLines = items.map(x => `${x.phone}\t${x.updatedDate || ''}`).join('\n');
+  navigator.clipboard.writeText(allLines);
+  showToast(`📋 Đã sao chép ${items.length} số ĐK 1 (kèm ngày giờ, đúng thứ tự)!`, 'success');
 }
 
 function parseDateForSort(dateStr) {
@@ -662,6 +682,34 @@ function renderCondition1Table() {
     elements.badgeCond1Count.textContent = `${count} số`;
   }
 
+  // Cập nhật icon mũi tên ở tiêu đề cột ĐK 1
+  if (elements.thCond1Phone) {
+    const icon = elements.thCond1Phone.querySelector('.sort-icon');
+    if (appState.sortCond1Col === 'phone-asc') {
+      if (icon) icon.textContent = '▲';
+      elements.thCond1Phone.classList.add('sorted');
+    } else if (appState.sortCond1Col === 'phone-desc') {
+      if (icon) icon.textContent = '▼';
+      elements.thCond1Phone.classList.add('sorted');
+    } else {
+      if (icon) icon.textContent = '⇅';
+      elements.thCond1Phone.classList.remove('sorted');
+    }
+  }
+  if (elements.thCond1Date) {
+    const icon = elements.thCond1Date.querySelector('.sort-icon');
+    if (appState.sortCond1Col === 'date-asc') {
+      if (icon) icon.textContent = '▲';
+      elements.thCond1Date.classList.add('sorted');
+    } else if (appState.sortCond1Col === 'date-desc') {
+      if (icon) icon.textContent = '▼';
+      elements.thCond1Date.classList.add('sorted');
+    } else {
+      if (icon) icon.textContent = '⇅';
+      elements.thCond1Date.classList.remove('sorted');
+    }
+  }
+
   if (count === 0) {
     elements.cond1TableBody.innerHTML = `
       <tr class="empty-row" id="emptyCond1Row">
@@ -673,19 +721,8 @@ function renderCondition1Table() {
     return;
   }
 
-  // Sao chép và sắp xếp
-  let items = [...appState.condition1Items];
-  const sort = appState.sortCond1Col;
-
-  if (sort === 'phone-asc') {
-    items.sort((a, b) => a.phone.localeCompare(b.phone));
-  } else if (sort === 'phone-desc') {
-    items.sort((a, b) => b.phone.localeCompare(a.phone));
-  } else if (sort === 'date-desc') {
-    items.sort((a, b) => parseDateForSort(b.updatedDate) - parseDateForSort(a.updatedDate));
-  } else if (sort === 'date-asc') {
-    items.sort((a, b) => parseDateForSort(a.updatedDate) - parseDateForSort(b.updatedDate));
-  }
+  // Lấy danh sách đã sắp xếp đúng theo thứ tự hiển thị
+  const items = getSortedCondition1Items();
 
   // Render HTML
   const rowsHtml = items.map((item, index) => {
@@ -696,7 +733,7 @@ function renderCondition1Table() {
         <td class="col-date">${item.updatedDate || '--:--:--'}</td>
         <td class="col-action">
           <div class="cond1-action-buttons">
-            <button type="button" class="btn-cell-copy" data-phone="${item.phone}" title="Sao chép số ${item.phone}">
+            <button type="button" class="btn-cell-copy" data-phone="${item.phone}" data-date="${item.updatedDate || ''}" title="Sao chép số ${item.phone} và ngày thay đổi">
               📋 Sao chép
             </button>
             <button type="button" class="btn-cell-delete" data-phone="${item.phone}" title="Xóa số ${item.phone} khỏi ô riêng">
@@ -727,19 +764,19 @@ function addTableRow(item) {
 }
 
 /**
- * Vẽ lại bảng theo bộ lọc và sắp xếp
+ * Lấy dữ liệu bảng chính hiện tại theo đúng bộ lọc và thứ tự sắp xếp hiển thị
  */
-function renderTable() {
+function getCurrentDisplayData() {
   let displayData = [...appState.tableData];
 
   // Lọc theo từ khóa
   if (appState.searchKeyword) {
-    const kw = appState.searchKeyword;
+    const kw = appState.searchKeyword.toLowerCase().trim();
     displayData = displayData.filter(r => 
-      r.phone.includes(kw) ||
-      r.productStatus.toLowerCase().includes(kw) ||
-      r.warehouse.toLowerCase().includes(kw) ||
-      r.updatedDate.toLowerCase().includes(kw)
+      (r.phone && r.phone.toLowerCase().includes(kw)) ||
+      (r.productStatus && r.productStatus.toLowerCase().includes(kw)) ||
+      (r.warehouse && r.warehouse.toLowerCase().includes(kw)) ||
+      (r.updatedDate && r.updatedDate.toLowerCase().includes(kw))
     );
   }
 
@@ -748,11 +785,53 @@ function renderTable() {
     const col = appState.sortCol;
     const factor = appState.sortAsc ? 1 : -1;
     displayData.sort((a, b) => {
-      let valA = a[col] || '';
-      let valB = b[col] || '';
-      return valA.localeCompare(valB) * factor;
+      if (col === 'date') {
+        const tA = parseDateForSort(a.updatedDate);
+        const tB = parseDateForSort(b.updatedDate);
+        return (tA - tB) * factor;
+      }
+      let valA = '';
+      let valB = '';
+      if (col === 'phone') {
+        valA = a.phone || '';
+        valB = b.phone || '';
+      } else if (col === 'status') {
+        valA = a.productStatus || '';
+        valB = b.productStatus || '';
+      } else if (col === 'warehouse') {
+        valA = a.warehouse || '';
+        valB = b.warehouse || '';
+      } else {
+        valA = a[col] || '';
+        valB = b[col] || '';
+      }
+      return valA.localeCompare(valB, 'vi', { numeric: true, sensitivity: 'base' }) * factor;
     });
   }
+
+  return displayData;
+}
+
+/**
+ * Vẽ lại bảng theo bộ lọc và sắp xếp
+ */
+function renderTable() {
+  const displayData = getCurrentDisplayData();
+
+  // Cập nhật biểu tượng mũi tên sắp xếp ở tiêu đề cột bảng chính
+  document.querySelectorAll('.data-table th.sortable').forEach(th => {
+    const col = th.dataset.col;
+    const icon = th.querySelector('.sort-icon');
+    if (icon) {
+      if (appState.sortCol === col) {
+        icon.textContent = appState.sortAsc ? '▲' : '▼';
+        th.classList.add('sorted');
+      } else {
+        icon.textContent = '⇅';
+        th.classList.remove('sorted');
+      }
+    }
+  });
 
   // Render HTML
   if (displayData.length === 0) {
@@ -804,9 +883,11 @@ window.copySingleRow = function(phone, status, warehouse, date) {
 
 /**
  * Xuất dữ liệu bảng để dán trực tiếp vào Excel (Tab-Separated Values - TSV)
+ * Đảm bảo xuất đúng 100% theo thứ tự người dùng đã lọc và sắp xếp trên màn hình!
  */
 function handleExportExcel() {
-  if (appState.tableData.length === 0) {
+  const displayData = getCurrentDisplayData();
+  if (displayData.length === 0) {
     showToast('Bảng chưa có dữ liệu để xuất!', 'error');
     return;
   }
@@ -815,13 +896,13 @@ function handleExportExcel() {
   const headers = ['Số thuê bao', 'Trạng thái sản phẩm', 'Hàng đang tại kho', 'Ngày thay đổi'];
   const rows = [headers.join('\t')];
 
-  for (const r of appState.tableData) {
+  for (const r of displayData) {
     rows.push([r.phone, r.productStatus, r.warehouse, r.updatedDate].join('\t'));
   }
 
   const tsvText = rows.join('\n');
   navigator.clipboard.writeText(tsvText);
-  showToast(` Đã sao chép ${appState.tableData.length} dòng dữ liệu! Bạn có thể dán (Ctrl+V) thẳng vào Excel.`, 'success');
+  showToast(`📋 Đã sao chép ${displayData.length} dòng dữ liệu theo đúng thứ tự hiển thị! Bạn có thể dán (Ctrl+V) thẳng vào Excel.`, 'success');
 }
 
 /**

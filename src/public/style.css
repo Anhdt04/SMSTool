@@ -753,6 +753,18 @@ textarea {
   background: #1b253b;
 }
 
+.data-table th.sortable.sorted {
+  color: #fff;
+  background: rgba(37, 99, 235, 0.2);
+  border-bottom: 2px solid var(--accent);
+}
+
+.data-table th.sortable.sorted .sort-icon {
+  opacity: 1;
+  color: var(--accent);
+  font-weight: 700;
+}
+
 .sort-icon {
   font-size: 0.75rem;
   margin-left: 4px;
@@ -975,6 +987,12 @@ textarea {
 .cond1-table th.sortable-th:hover {
   background: rgba(16, 185, 129, 0.2);
   color: #fff;
+}
+
+.cond1-table th.sortable-th.sorted {
+  background: rgba(16, 185, 129, 0.25);
+  color: #fff;
+  border-bottom: 2px solid var(--success);
 }
 
 .cond1-table td {
