@@ -49,6 +49,26 @@ queueService.on('condition1_found', data => broadcastSSE('condition1_found', dat
 queueService.on('stats_update', data => broadcastSSE('stats_update', data));
 queueService.on('log', data => broadcastSSE('log', data));
 
+let shutdownTimer = null;
+
+function checkAutoShutdown() {
+  if (sseClients.size === 0) {
+    if (shutdownTimer) clearTimeout(shutdownTimer);
+    // Khi người dùng đóng cửa sổ app, sau 6 giây tự động thoát server
+    shutdownTimer = setTimeout(() => {
+      if (sseClients.size === 0) {
+        console.log('\n[SMCS Tool] Cửa sổ ứng dụng đã đóng. Đang thoát chương trình...');
+        process.exit(0);
+      }
+    }, 6000);
+  } else {
+    if (shutdownTimer) {
+      clearTimeout(shutdownTimer);
+      shutdownTimer = null;
+    }
+  }
+}
+
 // API: Endpoint SSE
 app.get('/api/stream', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -56,6 +76,10 @@ app.get('/api/stream', (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
+  if (shutdownTimer) {
+    clearTimeout(shutdownTimer);
+    shutdownTimer = null;
+  }
   sseClients.add(res);
 
   // Gửi trạng thái ban đầu ngay khi client kết nối
@@ -63,6 +87,7 @@ app.get('/api/stream', (req, res) => {
 
   req.on('close', () => {
     sseClients.delete(res);
+    checkAutoShutdown();
   });
 });
 
@@ -142,14 +167,68 @@ app.get('/api/status', (req, res) => {
 const PORT = process.env.PORT || settingsManager.get().port || 3000;
 const { exec } = require('child_process');
 
+function launchDesktopApp(url) {
+  if (process.platform !== 'win32') {
+    const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open';
+    exec(`${cmd} ${url}`).unref();
+    return;
+  }
+
+  const fs = require('fs');
+  const path = require('path');
+
+  // Danh sách đường dẫn Chrome và Edge trên Windows
+  const browserCandidates = [
+    // 1. Google Chrome
+    path.join(process.env['ProgramFiles'] || '', 'Google/Chrome/Application/chrome.exe'),
+    path.join(process.env['ProgramFiles(x86)'] || '', 'Google/Chrome/Application/chrome.exe'),
+    path.join(process.env['LOCALAPPDATA'] || '', 'Google/Chrome/Application/chrome.exe'),
+    // 2. Microsoft Edge (luôn có sẵn 100% trên mọi máy Windows 10 & 11)
+    path.join(process.env['ProgramFiles(x86)'] || '', 'Microsoft/Edge/Application/msedge.exe'),
+    path.join(process.env['ProgramFiles'] || '', 'Microsoft/Edge/Application/msedge.exe'),
+    path.join(process.env['LOCALAPPDATA'] || '', 'Microsoft/Edge/Application/msedge.exe')
+  ];
+
+  let selectedBrowser = null;
+  for (const p of browserCandidates) {
+    if (fs.existsSync(p)) {
+      selectedBrowser = p;
+      break;
+    }
+  }
+
+  if (selectedBrowser) {
+    // Mở ở chế độ Application Window (--app), kích thước chuẩn Desktop
+    // Không có thanh địa chỉ URL, không có thanh tab hay bookmark, như app riêng biệt
+    const appCommand = `"${selectedBrowser}" --app="${url}" --window-size=1440,920`;
+    exec(appCommand, (err) => {
+      if (err) {
+        exec(`start ${url}`).unref();
+      }
+    }).unref();
+  } else {
+    // Dự phòng mở trình duyệt mặc định
+    exec(`start ${url}`).unref();
+  }
+}
+
 app.listen(PORT, () => {
   console.log(`=================================================`);
-  console.log(`🚀 SMCS VNPT Lookup Tool đang chạy tại:`);
-  console.log(`👉 http://localhost:${PORT}`);
+  console.log(`🚀 SMCS VNPT Lookup Tool - Ứng Dụng Độc Lập`);
+  console.log(`👉 Cửa sổ ứng dụng đang được khởi chạy...`);
+  console.log(`ℹ️ Đóng cửa sổ ứng dụng để thoát chương trình.`);
   console.log(`=================================================`);
 
-  // Tự động mở trình duyệt cho người dùng
+  // Đổi tiêu đề console
   if (process.platform === 'win32') {
-    exec(`start http://localhost:${PORT}`).unref();
+    try { process.title = 'SMCS VNPT Tool - Running'; } catch (e) {}
   }
+
+  // Tự động mở cửa sổ App Window riêng biệt
+  launchDesktopApp(`http://localhost:${PORT}`);
+
+  // Sau 25 giây khởi động, bắt đầu giám sát để tự tắt khi người dùng đóng cửa sổ app
+  setTimeout(() => {
+    checkAutoShutdown();
+  }, 25000);
 });
